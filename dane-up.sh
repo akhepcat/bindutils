@@ -23,7 +23,7 @@ then
       exit 1
 fi
 
-DANE=$(tlsa -4  --port 443 --insecure ${host}.${dlsa_domain} 2>&1 | grep TLSA | sed "s/${host}/${cname}/g; s/IN TLSA/3600 IN TLSA/;")
+DANE=$(tlsa -4  --port 443 --insecure ${host}.${domain} 2>&1 | grep TLSA | sed "s/${host}/${cname}/g; s/IN TLSA/3600 IN TLSA/;")
 OLDDANE=$(dig +short _443._tcp.${cname}.${domain}. @${ext_ns} TLSA | awk '{print $4}')
 OLDDANE=${OLDDANE,,}
 
