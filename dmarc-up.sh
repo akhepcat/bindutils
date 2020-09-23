@@ -23,9 +23,10 @@ then
 fi
 
 OLDDMARC=$(dig +short _dmarc.${domain}. @${ext_ns} TXT)
+OLDDMARC=${OLDDMARC//[\'\"]/}
 
 # only update if it's missing or different
-if [ -n "${OLDDMARC}" -o "${OLDDMARC}" != "${dmarc}" ]
+if [ -z "${OLDDMARC}" -o "${OLDDMARC}" != "${dmarc}" ]
 then
         nsupdate <<EOF
 server ${auth_ns}
@@ -35,8 +36,11 @@ update add _dmarc.${domain}. 86400 IN TXT "${dmarc}"
 send
 EOF
 
-	echo "DMARC record updated"
-else
-	echo "failed to update DMARC record"
-	exit 1
+	if [ $? -eq 0 ]
+	then
+		echo "DMARC record updated"
+	else
+		echo "failed to update DMARC record"
+		exit 1
+	fi
 fi
