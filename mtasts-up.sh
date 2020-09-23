@@ -5,6 +5,9 @@
 
 domain="example.net"			# local domain name
 keyfile="/etc/bind/named.keys"		# Where your keys are located
+ext_ns="ns-cache.example.net"		# external NS for testing
+
+#####
 
 NSC=1
 
