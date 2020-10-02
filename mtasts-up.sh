@@ -3,21 +3,21 @@
 ###  Updates the MTA-STS record to match the defined webserver's TLS certificate
 ###
 
-domain="example.net"			# local domain name
-keyfile="/etc/bind/named.keys"		# Where your keys are located
+# Global settings
 ext_ns="ns-cache.example.net"		# external NS for testing
+keyfile="/etc/bind/named.keys"		# Where your keys are located
 
 #####
 
-NSC=1
-
+NSC=$((NSC + 1))			# (auto-increment)		# every MTA-STS record gets a block
+DOMAIN[$NSC]="example.net"		# local domain name
 AUTH_NS[$NSC]="ext-ns.example.net"	# authoritative nameserver	# Copy this block for each nameserver you have
 RNDC_KEY[$NSC]="external"		# rndc key for this ns		# the script auto-iterates over them
-NSC=$((NSC + 1))			# (auto-increment)		# and pushes the MTA-STS record for each...
 
+NSC=$((NSC + 1))			# (auto-increment)		# every MTA-STS record gets a block
+DOMAIN[$NSC]="example.com"		# local domain name
 AUTH_NS[$NSC]="int-ns.example.net"	# authoritative nameserver	# Copy this block for each nameserver you have
 RNDC_KEY[$NSC]="internal"		# rndc key for this ns		# the script auto-iterates over them
-NSC=$((NSC + 1))			# (auto-increment)		# and pushes the MTA-STS record for each...
 
 ######
 
@@ -33,43 +33,45 @@ getkey() {
 }
 
 
-LM=$(curl --silent -I https://mta-sts.${domain}/.well-known/mta-sts.txt 2>/dev/null | grep 'last-modified' | cut -f2- -d:)
-if [ -z "${LM}" ]
-then
-	echo "can't determine last modified date of https://mta-sts.${domain}/.well-known/mta-sts.txt"
-	exit 1
-fi
+for i in $(seq 1 ${NSC} )
+do
+	auth_ns=${AUTH_NS[$i]}
+	kname=${RNDC_KEY[$i]}
+	domain=${DOMAIN[$i]}
 
-NOW=$(date '+%Y%m%d%H%M%S')
-NEWMTS=$(date '+%Y%m%d%H%M%SZ' --date="${LM}" 2>/dev/null||date '+%Y%m%d%H%M%SZ' --date="${NOW}")
+	# --insecure to ignore cert errors ### THIS IS DANGEROUS, USE ONLY IN TESTING OR EMERGENCIES
+	LM=$(curl --silent -I https://mta-sts.${domain}/.well-known/mta-sts.txt 2>/dev/null | grep 'last-modified' | cut -f2- -d:)
+	if [ -z "${LM}" ]
+	then
+		echo "can't determine last modified date of https://mta-sts.${domain}/.well-known/mta-sts.txt"
+		exit 1
+	fi
 
-#just extract the date
-OLDMTS=$(dig +short _mta-sts.${domain}. @${ext_ns} TXT | awk '{print $2}' | cut -f 2 -d= | sed 's/"//g;')
+	NOW=$(date '+%Y%m%d%H%M%S')
+	NEWMTS=$(date '+%Y%m%d%H%M%SZ' --date="${LM}" 2>/dev/null||date '+%Y%m%d%H%M%SZ' --date="${NOW}")
 
-if [ -n "${NEWMTS}" -a -n "${OLDMTS}" ]
-then
-    if [ "${OLDMTS}" != "${NEWMTS}" ]
-    then
-        MTSTXT="v=STSv1; id=${NEWMTS}"
+	#just extract the date
+	OLDMTS=$(dig +short _mta-sts.${domain}. @${ext_ns} TXT | awk '{print $2}' | cut -f 2 -d= | sed 's/"//g;')
 
-	for i in $(seq 1 $NSC)
-	do
-		auth_ns=AUTH_NS[$i]
-		kname=RNDC_KEY[$i]
-		getkey
+	if [ -n "${NEWMTS}" -a -n "${OLDMTS}" ]
+	then
+		if [ "${OLDMTS}" != "${NEWMTS}" ]
+		then
+        		MTSTXT="v=STSv1; id=${NEWMTS}"
 
-		[[ -n "${auth_ns}" ]] && nsupdate <<EOF
-server ${auth_ext_ns}
+			getkey
+
+			[[ -n "${auth_ns}" ]] && nsupdate <<EOF
+server ${auth_ns}
 key ${algo}:${kname} ${secret}
 update delete _mta-sts.${domain}. IN TXT
 update add _mta-sts.${domain}. 3600 IN TXT "${MTSTXT}"
 send
 EOF
-	done
 
-        echo "MTS-STS records updated"
-    fi
-else
-    echo "failed to update MTS-STS record"
-    exit 1
-fi
+		        echo "MTS-STS records updated"
+		fi
+	else
+		echo "failed to update MTS-STS record for ${domain}/${auth_ns}"
+	fi
+done
