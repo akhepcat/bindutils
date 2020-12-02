@@ -3,21 +3,29 @@
 ###  Updates the MTA-STS record to match the defined webserver's TLS certificate
 ###
 
-# Global settings
-ext_ns="ns-cache.example.net"		# external NS for testing
-keyfile="/etc/bind/named.keys"		# Where your keys are located
+if [ ! -r "${0}.local" ]
+then
+	# Global settings
+	ext_ns="ns-cache.example.net"		# external NS for testing
+	keyfile="/etc/bind/named.keys"		# Where your keys are located
 
-#####
+	#####
+	# Per-host settings
 
-NSC=$((NSC + 1))			# (auto-increment)		# every MTA-STS record gets a block
-DOMAIN[$NSC]="example.net"		# local domain name
-AUTH_NS[$NSC]="ext-ns.example.net"	# authoritative nameserver	# Copy this block for each nameserver you have
-RNDC_KEY[$NSC]="external"		# rndc key for this ns		# the script auto-iterates over them
+	NSC=$((NSC + 1))			# (auto-increment)		# every MTA-STS record gets a block
+	DOMAIN[$NSC]="example.net"		# local domain name
+	AUTH_NS[$NSC]="ext-ns.example.net"	# authoritative nameserver	# Copy this block for each nameserver you have
+	RNDC_KEY[$NSC]="external"		# rndc key for this ns		# the script auto-iterates over them
 
-NSC=$((NSC + 1))			# (auto-increment)		# every MTA-STS record gets a block
-DOMAIN[$NSC]="example.com"		# local domain name
-AUTH_NS[$NSC]="int-ns.example.net"	# authoritative nameserver	# Copy this block for each nameserver you have
-RNDC_KEY[$NSC]="internal"		# rndc key for this ns		# the script auto-iterates over them
+	NSC=$((NSC + 1))			# (auto-increment)		# every MTA-STS record gets a block
+	DOMAIN[$NSC]="example.com"		# local domain name
+	AUTH_NS[$NSC]="int-ns.example.net"	# authoritative nameserver	# Copy this block for each nameserver you have
+	RNDC_KEY[$NSC]="internal"		# rndc key for this ns		# the script auto-iterates over them
+
+else
+	# Read in the setting from the .local config
+	. "${0}.local"
+fi
 
 ######
 
