@@ -1,30 +1,37 @@
-#!/bin/bash
+
 ### 
 ###  Updates the TLSA/DANE record to match the defined webserver's TLS certificate
 ###
 
-# Global settings
-ext_ns="ns-cache.example.net"		# external NS for testing
-keyfile="/etc/bind/named.keys"	# Where your keys are located
+if [ ! -r "${0}.local" ]
+then
+	# Global settings
+	ext_ns="ns-cache.example.net"		# external NS for testing
+	keyfile="/etc/bind/named.keys"	# Where your keys are located
 
-####
+	####
 
-NSC=$((NSC + 1))		# (auto-increment)		# every DANE record gets a block
-HOST[$NSC]="prodweb"		# internal hostname
-CNAME[$NSC]="www"		# external hostname
-WWWASDOMAIN[$NSC]=1		# This domain's www is equal to the bare domain
-DOMAIN[$NSC]="example.net"	# domain name
-RNDC_KEY[$NSC]="update"		# the name of the key
-AUTH_NS[$NSC]="192.168.1.1"	# The authoritative nameserver
+	NSC=$((NSC + 1))		# (auto-increment)		# every DANE record gets a block
+	HOST[$NSC]="prodweb"		# internal hostname
+	CNAME[$NSC]="www"		# external hostname
+	ASDOMAIN[$NSC]=1		# This domain's CNAME is equal to the bare domain
+	PORTS[$NSC]="25 443"		# we want SMTP/starttls and HTTPS
+	DOMAIN[$NSC]="example.net"	# domain name
+	RNDC_KEY[$NSC]="update"		# the name of the key
+	AUTH_NS[$NSC]="192.168.1.1"	# The authoritative nameserver
 
-
-NSC=$((NSC + 1))		# (auto-increment)		# every DANE record gets a block
-HOST[$NSC]="devweb"		# internal hostname
-CNAME[$NSC]="www-dev"		# external hostname
-WWWASDOMAIN[$NSC]=0		# This domain's www is NOT equal to the bare domain (default)
-DOMAIN[$NSC]="example.com"	# domain name
-RNDC_KEY[$NSC]="dev-update"	# the name of the key
-AUTH_NS[$NSC]="192.168.2.1"	# The authoritative nameserver
+	NSC=$((NSC + 1))		# (auto-increment)		# every DANE record gets a block
+	HOST[$NSC]="devweb"		# internal hostname
+	CNAME[$NSC]="www-dev"		# external hostname
+	ASDOMAIN[$NSC]=0		# This domain's CNAME is NOT equal to the bare domain (default)
+	PORTS[$NSC]="443"		# we want only HTTPS
+	DOMAIN[$NSC]="example.com"	# domain name
+	RNDC_KEY[$NSC]="dev-update"	# the name of the key
+	AUTH_NS[$NSC]="192.168.2.1"	# The authoritative nameserver
+else
+	# Read in the setting from the .local config
+	. "${0}.local"
+fi
 
 ######
 
@@ -41,19 +48,33 @@ getkey() {
 
 for i in $(seq 1 ${NSC} )
 do
-	host=${HOST[$i]}
 	cname=${CNAME[$i]}
+	host=${HOST[$i]} ; host=${host:-$cname}
 	auth_ns=${AUTH_NS[$i]}
 	kname=${RNDC_KEY[$i]}
 	domain=${DOMAIN[$i]}
-	wasd=${WWWASDOMAIN[$i]}
+	ports=${PORTS[$i]}
+	wasd=${ASDOMAIN[$i]}
 
-	DANE=$(tlsa -4  --port 443 --insecure ${host}.${domain} 2>&1 | grep TLSA | sed "s/${host}/${cname}/g; s/IN TLSA/3600 IN TLSA/;")
-	OLDDANE=$(dig +short _443._tcp.${cname}.${domain}. @${ext_ns} TLSA | awk '{print $4}')
-	OLDDANE=${OLDDANE,,}
+	for port in ${ports}
+	do
 
-	if [ -n "${DANE}" -a -z "${DANE##*IN TLSA 3 0 1*}" ]
-	then
+	    case ${port} in
+		21) POPT="--port ${port} --starttls ftp" ;;
+		25) POPT="--port ${port} --starttls smtp" ;;
+		110) POPT="--port ${port} --starttls pop3" ;;
+		143) POPT="--port ${port} --starttls imap" ;;
+		*) POPT="--port ${port}" ;;
+	    esac
+
+	    hname="${host:+$host.}${domain}"
+	    xname="${cname:+$cname.}${domain}"
+	    DANE=$(tlsa -4 ${POPT} --insecure ${hname} 2>&1 | grep TLSA | sed "s/${host}/${cname}/g; s/IN TLSA/3600 IN TLSA/;")
+	    OLDDANE=$(dig +short _${port}._tcp.${xname}. @${ext_ns} TLSA | awk '{print $4}')
+	    OLDDANE=${OLDDANE,,}
+
+	    if [ -n "${DANE}" -a -z "${DANE##*IN TLSA 3 0 1*}" ]
+	    then
 
 		# $FORCE is read from the cli env if you need it
 		if [ -n "${DANE##*$OLDDANE*}" -o ${FORCE:-0} -eq 1 ]
@@ -63,25 +84,29 @@ do
 			nsupdate <<EOF
 server ${auth_ns}
 key ${algo}:${kname} ${secret}
-update delete _443._tcp.${cname}.${domain}. IN TLSA
+update delete _${port}._tcp.${cname}.${domain}. IN TLSA
 update add ${DANE}
 send
 EOF
-			if [ ${wasd:-0} -eq 1 -a "${cname}" = "www" ]
+			if [ ${wasd:-0} -eq 1 ]
 			then
-				# use the same record for the bare domain as the www
+				# fix-up the DANE record for the bare domain
+				DANE="${DANE//${cname}./}"
 				nsupdate <<EOF
 server ${auth_ns}
 key ${algo}:${kname} ${secret}
-update delete _443._tcp.${domain}. IN TLSA
+update delete _${port}._tcp.${domain}. IN TLSA
 update add ${DANE}
 send
 EOF
 
 			fi
-			echo "TLSA/DANE record updated"
+			echo "TLSA/DANE records for ${domain}:${port} updated"
 		fi
-	else
-		echo "failed to update TLSA/DANE record for ${domain}/${auth_ns}"
-	fi
+	    else
+		echo "failed to update TLSA/DANE record for ${domain}:${port}/${auth_ns}"
+	    fi
+
+	# ports loop
+	done
 done
