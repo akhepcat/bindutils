@@ -12,6 +12,7 @@ keyfile="/etc/bind/named.keys"	# Where your keys are located
 NSC=$((NSC + 1))		# (auto-increment)		# every DANE record gets a block
 HOST[$NSC]="prodweb"		# internal hostname
 CNAME[$NSC]="www"		# external hostname
+WWWASDOMAIN[$NSC]=1		# This domain's www is equal to the bare domain
 DOMAIN[$NSC]="example.net"	# domain name
 RNDC_KEY[$NSC]="update"		# the name of the key
 AUTH_NS[$NSC]="192.168.1.1"	# The authoritative nameserver
@@ -20,6 +21,7 @@ AUTH_NS[$NSC]="192.168.1.1"	# The authoritative nameserver
 NSC=$((NSC + 1))		# (auto-increment)		# every DANE record gets a block
 HOST[$NSC]="devweb"		# internal hostname
 CNAME[$NSC]="www-dev"		# external hostname
+WWWASDOMAIN[$NSC]=0		# This domain's www is NOT equal to the bare domain (default)
 DOMAIN[$NSC]="example.com"	# domain name
 RNDC_KEY[$NSC]="dev-update"	# the name of the key
 AUTH_NS[$NSC]="192.168.2.1"	# The authoritative nameserver
@@ -44,6 +46,7 @@ do
 	auth_ns=${AUTH_NS[$i]}
 	kname=${RNDC_KEY[$i]}
 	domain=${DOMAIN[$i]}
+	wasd=${WWWASDOMAIN[$i]}
 
 	DANE=$(tlsa -4  --port 443 --insecure ${host}.${domain} 2>&1 | grep TLSA | sed "s/${host}/${cname}/g; s/IN TLSA/3600 IN TLSA/;")
 	OLDDANE=$(dig +short _443._tcp.${cname}.${domain}. @${ext_ns} TLSA | awk '{print $4}')
@@ -52,7 +55,8 @@ do
 	if [ -n "${DANE}" -a -z "${DANE##*IN TLSA 3 0 1*}" ]
 	then
 
-		if [ -n "${DANE##*$OLDDANE*}" ]
+		# $FORCE is read from the cli env if you need it
+		if [ -n "${DANE##*$OLDDANE*}" -o ${FORCE:-0} -eq 1 ]
 		then
 			getkey
 
@@ -63,7 +67,19 @@ update delete _443._tcp.${cname}.${domain}. IN TLSA
 update add ${DANE}
 send
 EOF
-	 	       echo "TLSA/DANE record updated"
+			if [ ${wasd:-0} -eq 1 -a "${cname}" = "www" ]
+			then
+				# use the same record for the bare domain as the www
+				nsupdate <<EOF
+server ${auth_ns}
+key ${algo}:${kname} ${secret}
+update delete _443._tcp.${domain}. IN TLSA
+update add ${DANE}
+send
+EOF
+
+			fi
+			echo "TLSA/DANE record updated"
 		fi
 	else
 		echo "failed to update TLSA/DANE record for ${domain}/${auth_ns}"
