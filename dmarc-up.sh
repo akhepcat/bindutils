@@ -2,25 +2,32 @@
 ###
 ### This only updates if the existing dmarc rule changes or doesn't exist
 
-# Global settings
-ext_ns="ns-cache.example.net"		# external NS for testing
-keyfile="/etc/bind/named.keys"	# Where your keys are located
+if [ ! -r "${0}.local" ]
+then
+	# Global settings
+	ext_ns="ns-cache.example.net"		# external NS for testing
+	keyfile="/etc/bind/named.keys"	# Where your keys are located
 
-# the dmarc rule to use ( defaults include aspf=r and adkim=r; no need to add below, only if 's'trict is required)
-dmarc="v=DMARC1; p=quarantine; sp=quarantine; pct=100; fo=1; rua=mailto:MYACCOUNT@dmarc.report-uri.com; ruf=mailto:MYACCOUNT@dmarc.report-uri.com"
+	# the dmarc rule to use ( defaults include aspf=r and adkim=r; no need to add below, only if 's'trict is required)
+	dmarc="v=DMARC1; p=quarantine; sp=quarantine; pct=100; fo=1; rua=mailto:MYACCOUNT@dmarc.report-uri.com; ruf=mailto:MYACCOUNT@dmarc.report-uri.com"
 
-####
+	####
+	# Per-host settings
 
-NSC=$((NSC + 1))		# (auto-increment)		# every DANE record gets a block
-DOMAIN[$NSC]="example.net"	# domain name
-RNDC_KEY[$NSC]="update"		# the name of the key
-AUTH_NS[$NSC]="192.168.1.1"	# The authoritative nameserver
+	NSC=$((NSC + 1))		# (auto-increment)		# every DANE record gets a block
+	DOMAIN[$NSC]="example.net"	# domain name
+	RNDC_KEY[$NSC]="update"		# the name of the key
+	AUTH_NS[$NSC]="192.168.1.1"	# The authoritative nameserver
 
+	NSC=$((NSC + 1))		# (auto-increment)		# every DANE record gets a block
+	DOMAIN[$NSC]="example.com"	# domain name
+	RNDC_KEY[$NSC]="update"		# the name of the key
+	AUTH_NS[$NSC]="192.168.2.1"	# The authoritative nameserver
 
-NSC=$((NSC + 1))		# (auto-increment)		# every DANE record gets a block
-DOMAIN[$NSC]="example.com"	# domain name
-RNDC_KEY[$NSC]="update"		# the name of the key
-AUTH_NS[$NSC]="192.168.2.1"	# The authoritative nameserver
+else
+	# Read in the setting from the .local config
+	. "${0}.local"
+fi
 
 ######
 
