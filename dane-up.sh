@@ -3,6 +3,20 @@
 ###  Updates the TLSA/DANE record to match the defined webserver's TLS certificate
 ###
 
+## More specifically, it is RECOMMENDED that at most sites TLSA records published for DANE servers
+##    be “DANE-EE(3) SPKI(1) SHA2-256(1)”  records.
+##
+## Selector SPKI(1) is chosen because it is compatible with
+## raw public keys [RFC7250] and the resulting TLSA record need not
+## change across certificate renewals with the same key.
+##
+## Matching type SHA2-256(1) is chosen because all DANE implementations are required
+## to support SHA2-256.
+##
+## This TLSA record type easily supports hosting arrangements with a single certificate
+## matching all hosted domains. It is also the easiest to implement correctly in the client. [RFC 7671]
+
+
 if [ ! -r "${0}.local" ]
 then
 	# Global settings
@@ -32,6 +46,8 @@ else
 	# Read in the setting from the .local config
 	. "${0}.local"
 fi
+
+NSD="-d -L1"
 
 ######
 
@@ -69,11 +85,11 @@ do
 
 	    hname="${host:+$host.}${domain}"
 	    xname="${cname:+$cname.}${domain}"
-	    DANE=$(tlsa -4 ${POPT} --insecure ${hname} 2>&1 | grep TLSA | sed "s/${host}/${cname}/g; s/IN TLSA/3600 IN TLSA/;")
+	    DANE=$(tlsa -4 --usage 3 --selector 1 --mtype 1 ${POPT} --insecure ${hname} 2>&1 | grep TLSA | sed "s/${host}/${cname}/g; s/IN TLSA/3600 IN TLSA/;")
 	    OLDDANE=$(dig +short _${port}._tcp.${xname}. @${ext_ns} TLSA | awk '{print $4}')
 	    OLDDANE=${OLDDANE,,}
 
-	    if [ -n "${DANE}" -a -z "${DANE##*IN TLSA 3 0 1*}" ]
+	    if [ -n "${DANE}" -a -z "${DANE##*IN TLSA 3 1 1*}" ]
 	    then
 
 		# $FORCE is read from the cli env if you need it
@@ -81,10 +97,11 @@ do
 		then
 			getkey
 
-			nsupdate <<EOF
+			nsupdate ${NSD} <<EOF
 server ${auth_ns}
 key ${algo}:${kname} ${secret}
 update delete _${port}._tcp.${cname}.${domain}. IN TLSA
+send
 update add ${DANE}
 send
 EOF
@@ -92,10 +109,11 @@ EOF
 			then
 				# fix-up the DANE record for the bare domain
 				DANE="${DANE//${cname}./}"
-				nsupdate <<EOF
+				nsupdate ${NSD} <<EOF
 server ${auth_ns}
 key ${algo}:${kname} ${secret}
 update delete _${port}._tcp.${domain}. IN TLSA
+send
 update add ${DANE}
 send
 EOF

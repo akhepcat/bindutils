@@ -27,6 +27,8 @@ else
 	. "${0}.local"
 fi
 
+NSD="-d -L1"
+
 ######
 
 getkey() {
@@ -69,7 +71,7 @@ do
 
 			getkey
 
-			[[ -n "${auth_ns}" ]] && nsupdate <<EOF
+			[[ -n "${auth_ns}" ]] && nsupdate ${NSD} <<EOF
 server ${auth_ns}
 key ${algo}:${kname} ${secret}
 update delete _mta-sts.${domain}. IN TXT
