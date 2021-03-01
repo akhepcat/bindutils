@@ -85,7 +85,7 @@ do
 
 	    hname="${host:+$host.}${domain}"
 	    xname="${cname:+$cname.}${domain}"
-	    DANE=$(tlsa -4 --usage 3 --selector 1 --mtype 1 ${POPT} --insecure ${hname} 2>&1 | grep TLSA | sed "s/${host}/${cname}/g; s/IN TLSA/3600 IN TLSA/;")
+	    DANE=$(tlsa --usage 3 --selector 1 --mtype 1 ${POPT} --insecure ${hname} 2>&1 | grep TLSA | sed "s/${host}/${cname}/g; s/IN TLSA/3600 IN TLSA/;")
 	    OLDDANE=$(dig +short _${port}._tcp.${xname}. @${ext_ns} TLSA | awk '{print $4}')
 	    OLDDANE=${OLDDANE,,}
 
