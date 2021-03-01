@@ -63,7 +63,7 @@ do
 	#just extract the date
 	OLDMTS=$(dig +short _mta-sts.${domain}. @${ext_ns} TXT | awk '{print $2}' | cut -f 2 -d= | sed 's/"//g;')
 
-	if [ -n "${NEWMTS}" -a -n "${OLDMTS}" ]
+	if [ -n "${NEWMTS}" -a -n "${OLDMTS:-new}" ]
 	then
 		if [ "${OLDMTS}" != "${NEWMTS}" ]
 		then
