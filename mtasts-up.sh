@@ -6,6 +6,8 @@
 if [ ! -r "${0}.local" ]
 then
 	# Global settings
+	tlsrpt="v=TLSRPTv1; rua=mailto:MYACCOUNT@dmarc.report-uri.com"
+
 	ext_ns="ns-cache.example.net"		# external NS for testing
 	keyfile="/etc/bind/named.keys"		# Where your keys are located
 
@@ -75,7 +77,9 @@ do
 server ${auth_ns}
 key ${algo}:${kname} ${secret}
 update delete _mta-sts.${domain}. IN TXT
+${tlsrpt:+update delete _smtp._tls.${domain}. IN TXT}
 update add _mta-sts.${domain}. 3600 IN TXT "${MTSTXT}"
+${tlsrpt:+update add _smtp._tls.$domain 3600 IN TXT "$tlsrpt"}
 send
 EOF
 
