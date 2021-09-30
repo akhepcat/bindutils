@@ -33,6 +33,8 @@ then
 	DOMAIN[$NSC]="example.net"	# domain name
 	RNDC_KEY[$NSC]="update"		# the name of the key
 	AUTH_NS[$NSC]="192.168.1.1"	# The authoritative nameserver
+	NOTIFY[$NSC]="192.168.1.1"	# Nameserver to trigger notifies on
+	VIEW[$NSC]="in external"	# This nameserver has views, we need the external view
 
 	NSC=$((NSC + 1))		# (auto-increment)		# every DANE record gets a block
 	HOST[$NSC]="devweb"		# internal hostname
@@ -42,6 +44,8 @@ then
 	DOMAIN[$NSC]="example.com"	# domain name
 	RNDC_KEY[$NSC]="dev-update"	# the name of the key
 	AUTH_NS[$NSC]="192.168.2.1"	# The authoritative nameserver
+	NOTIFY[$NSC]="192.168.1.1"	# Nameserver to trigger notifies on
+	VIEW[$NSC]=""			# This nameserver doesn't have views
 else
 	# Read in the setting from the .local config
 	. "${0}.local"
@@ -120,6 +124,7 @@ EOF
 
 			fi
 			echo "TLSA/DANE records for ${domain}:${port} updated"
+			NEEDSYNC=1
 		fi
 	    else
 		echo "failed to update TLSA/DANE record for ${domain}:${port}/${auth_ns}"
@@ -128,3 +133,20 @@ EOF
 	# ports loop
 	done
 done
+
+if [ ${NEEDSYNC:-0} -eq 1 ]
+then
+	# Uniquely trigger nameserver sync's
+	for i in $(seq 1 ${NSC} )
+	do
+		NS=${AUTH_NS[$i]}
+		NSS=${NS//./}
+		SAW=${SEEN[$NSS]}
+		if [ ${SAW:-0} -ne 1 ]
+		then
+			NNS=${NOTIFY[$i]}
+			rndc -s ${NNS} notify ${DOMAIN[$i]} ${VIEW[$i]}
+			SEEN[${NSS}]=1
+		fi
+	done
+fi
