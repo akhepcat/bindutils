@@ -17,12 +17,16 @@ then
 	NSC=$((NSC + 1))			# (auto-increment)		# every MTA-STS record gets a block
 	DOMAIN[$NSC]="example.net"		# local domain name
 	AUTH_NS[$NSC]="ext-ns.example.net"	# authoritative nameserver	# Copy this block for each nameserver you have
+	NOTIFY[$NSC]="192.168.1.1"	# Nameserver to trigger notifies on
 	RNDC_KEY[$NSC]="external"		# rndc key for this ns		# the script auto-iterates over them
+	VIEW[$NSC]="in external"		# This nameserver has views, we need the external view
 
 	NSC=$((NSC + 1))			# (auto-increment)		# every MTA-STS record gets a block
 	DOMAIN[$NSC]="example.com"		# local domain name
 	AUTH_NS[$NSC]="int-ns.example.net"	# authoritative nameserver	# Copy this block for each nameserver you have
+	NOTIFY[$NSC]="192.168.1.1"	# Nameserver to trigger notifies on
 	RNDC_KEY[$NSC]="internal"		# rndc key for this ns		# the script auto-iterates over them
+	VIEW[$NSC]=""				# This nameserver doesn't have views
 
 else
 	# Read in the setting from the .local config
@@ -84,8 +88,26 @@ send
 EOF
 
 		        echo "MTS-STS records updated"
+		        NEEDSYNC=1
 		fi
 	else
 		echo "failed to update MTS-STS record for ${domain}/${auth_ns}"
 	fi
 done
+
+if [ ${NEEDSYNC:-0} -eq 1 ]
+then
+	# Uniquely trigger nameserver sync's
+	for i in $(seq 1 ${NSC} )
+	do
+		NS=${AUTH_NS[$i]}
+		NSS=${NS//./}
+		SAW=${SEEN[$NSS]}
+		if [ ${SAW:-0} -ne 1 ]
+		then
+			NNS=${NOTIFY[$i]}
+			rndc -s ${NNS} notify ${DOMAIN[$i]} ${VIEW[$i]}
+			SEEN[${NSS}]=1
+		fi
+	done
+fi
