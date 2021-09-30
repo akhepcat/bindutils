@@ -18,11 +18,15 @@ then
 	DOMAIN[$NSC]="example.net"	# domain name
 	RNDC_KEY[$NSC]="update"		# the name of the key
 	AUTH_NS[$NSC]="192.168.1.1"	# The authoritative nameserver
+	NOTIFY[$NSC]="192.168.1.1"	# Nameserver to trigger notifies on
+	VIEW[$NSC]="in external"	# This nameserver has views, we need the external view
 
 	NSC=$((NSC + 1))		# (auto-increment)		# every DANE record gets a block
 	DOMAIN[$NSC]="example.com"	# domain name
 	RNDC_KEY[$NSC]="update"		# the name of the key
 	AUTH_NS[$NSC]="192.168.2.1"	# The authoritative nameserver
+	NOTIFY[$NSC]="127.0.0.1"	# Nameserver to trigger notifies on
+	VIEW[$NSC]=""			# This nameserver doesn't have views
 
 else
 	# Read in the setting from the .local config
@@ -69,8 +73,26 @@ EOF
 		if [ $? -eq 0 ]
 		then
 			echo "DMARC record updated"
+			NEEDSYNC=1
 		else
 			echo "failed to update DMARC record for ${domain}/${auth_ns}"
 		fi
 	fi
 done
+
+if [ ${NEEDSYNC:-0} -eq 1 ]
+then
+	# Uniquely trigger nameserver sync's
+	for i in $(seq 1 ${NSC} )
+	do
+		NS=${AUTH_NS[$i]}
+		NSS=${NS//./}
+		SAW=${SEEN[$NSS]}
+		if [ ${SAW:-0} -ne 1 ]
+		then
+			NNS=${NOTIFY[$i]}
+			rndc -s ${NNS} notify ${DOMAIN[$i]} ${VIEW[$i]}
+			SEEN[${NSS}]=1
+		fi
+	done
+fi
