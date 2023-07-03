@@ -127,7 +127,7 @@ EOF
 			NEEDSYNC=1
 		fi
 	    else
-		echo "failed to update TLSA/DANE record for ${domain}:${port}/${auth_ns}"
+		echo "failed to update TLSA/DANE record for ${host}.${domain}:${port}/${auth_ns}"
 	    fi
 
 	# ports loop
